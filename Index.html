@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Second Order System Response</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            width: 80%;
+            margin: auto;
+            padding: 20px;
+        }
+        h1, h2, h3 {
+            text-align: center;
+        }
+        .input-section, .results-section, .plot-section {
+            margin: 20px 0;
+        }
+        label {
+            font-weight: bold;
+        }
+        input {
+            width: 300px;
+            padding: 10px;
+            margin: 5px 0;
+            font-size: 1rem;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .result {
+            font-size: 1.2rem;
+            margin: 10px 0;
+        }
+        .plot-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+        canvas {
+            width: 600px !important;  /* Increased width for better visibility */
+            height: 300px !important;  /* Increased height for better visibility */
+            display: block;
+            margin: 20px auto;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Northern Technical University</h1>
+    <h2>Technical Engineering College</h2>
+    <h3>Chemical and Petroleum Industries Technologies Engineering</h3>
+    <p>Designed by: Azam Isam</p>
+    
+    <hr>
+
+    <h3>Second Order System Response Calculator</h3>
+
+    <div class="input-section">
+        <label for="numerator">Enter Numerator Coefficients (space-separated):</label>
+        <input type="text" id="numerator" placeholder="e.g. 1 2 3"><br>
+
+        <label for="denominator">Enter Denominator Coefficients (space-separated):</label>
+        <input type="text" id="denominator" placeholder="e.g. 1 0.5 1"><br>
+
+        <button onclick="calculateAndPlot()">Calculate</button>
+    </div>
+
+    <div class="results-section">
+        <p class="result" id="zeta">Damping Ratio (ζ): N/A</p>
+        <p class="result" id="overshoot">Overshoot (Mp): N/A</p>
+        <p class="result" id="peak-time">Peak Time (Tp): N/A</p>
+        <p class="result" id="rise-time">Rise Time (Tr): N/A</p>
+        <p class="result" id="damping-type">Damping Type: N/A</p>
+    </div>
+
+    <div class="plot-container">
+        <canvas id="inputCurve"></canvas>
+        <canvas id="stepResponse"></canvas>
+    </div>
+
+    <p id="error-message" style="color: red;"></p>
+
+</div>
+
+<!-- Load Chart.js for plotting graphs -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    let inputChart = null;
+    let responseChart = null;
+
+    function solveQuadratic(a, b, c) {
+        const discriminant = b * b - 4 * a * c;
+        if (discriminant > 0) {
+            const root1 = (-b + Math.sqrt(discriminant)) / (2 * a);
+            const root2 = (-b - Math.sqrt(discriminant)) / (2 * a);
+            return [root1, root2];
+        } else if (discriminant === 0) {
+            const root = -b / (2 * a);
+            return [root, root];
+        } else {
+            const realPart = -b / (2 * a);
+            const imagPart = Math.sqrt(-discriminant) / (2 * a);
+            return [complex(realPart, imagPart), complex(realPart, -imagPart)];
+        }
+    }
+
+    function complex(real, imag) {
+        return { real: real, imag: imag };
+    }
+
+    function absComplex(z) {
+        return Math.sqrt(z.real * z.real + z.imag * z.imag);
+    }
+
+    function stepResponse(wn, zeta, t) {
+        if (zeta < 1) {
+            let wd = wn * Math.sqrt(1 - zeta ** 2);
+            return 1 - (Math.exp(-zeta * wn * t) * (Math.cos(wd * t) + (zeta / Math.sqrt(1 - zeta ** 2)) * Math.sin(wd * t)));
+        } else if (zeta === 1) {
+            return 1 - Math.exp(-wn * t) * (1 + wn * t);
+        } else {
+            let s1 = wn * (-zeta + Math.sqrt(zeta ** 2 - 1));
+            let s2 = wn * (-zeta - Math.sqrt(zeta ** 2 - 1));
+            return 1 + (s2 * Math.exp(s1 * t) - s1 * Math.exp(s2 * t)) / (s2 - s1);
+        }
+    }
+
+    function calculateAndPlot() {
+        try {
+            const num = document.getElementById('numerator').value.trim().split(' ').map(Number);
+            const den = document.getElementById('denominator').value.trim().split(' ').map(Number);
+
+            if (den.length !== 3) throw new Error("Please enter exactly 3 coefficients for a second-order system.");
+
+            let poles = solveQuadratic(den[0], den[1], den[2]);
+            if (poles.length === 0) throw new Error('No real or complex poles found.');
+
+            let firstPole = poles[0];
+
+            let wn = (typeof firstPole === 'object') ? absComplex(firstPole) : Math.abs(firstPole);
+            let zeta = (typeof firstPole === 'object') ? -firstPole.real / wn : -firstPole / wn;
+
+            let Mp = zeta < 1 ? 100 * Math.exp((-Math.PI * zeta) / Math.sqrt(1 - zeta ** 2)) : 0;
+            let theta = Math.acos(zeta);
+            let wd = wn * Math.sqrt(1 - zeta ** 2);
+            let tr = zeta < 1 ? (Math.PI - theta) / wd : 0;
+            let Tp = zeta < 1 ? Math.PI / (wn * Math.sqrt(1 - zeta ** 2)) : 0;
+
+            document.getElementById('zeta').textContent = `Damping Ratio (ζ): ${zeta.toFixed(2)}`;
+            document.getElementById('overshoot').textContent = `Overshoot (Mp): ${Mp.toFixed(2)}%`;
+            document.getElementById('peak-time').textContent = `Peak Time (Tp): ${Tp.toFixed(2)} s`;
+            document.getElementById('rise-time').textContent = `Rise Time (Tr): ${tr.toFixed(2)} s`;
+
+            let dampingType = '';
+            if (zeta === 0) dampingType = "Undamped: ζ = 0";
+            else if (zeta > 0 && zeta < 1) dampingType = "Under-damped: 0 < ζ < 1";
+            else if (zeta === 1) dampingType = "Critically damped: ζ = 1";
+            else dampingType = "Over-damped: ζ > 1";
+            document.getElementById('damping-type').textContent = `Damping Type: ${dampingType}`;
+
+            plotGraphs(wn, zeta);
+
+        } catch (error) {
+            document.getElementById('error-message').textContent = `Error: ${error.message}`;
+        }
+    }
+
+    function plotGraphs(wn, zeta) {
+        const ctxInput = document.getElementById('inputCurve').getContext('2d');
+        const ctxResponse = document.getElementById('stepResponse').getContext('2d');
+
+        const time = Array.from({ length: 500 }, (_, i) => (i * 0.02).toFixed(2));
+        const stepResponseData = time.map(t => stepResponse(wn, zeta, parseFloat(t)));
+
+        // Destroy the previous charts if they exist
+        if (inputChart) {
+            inputChart.destroy();
+        }
+        if (responseChart) {
+            responseChart.destroy();
+        }
+
+        // Create new charts with no bubbles and thinner lines
+        inputChart = new Chart(ctxInput, {
+            type: 'line',
+            data: {
+                labels: time,
+                datasets: [{
+                    label: 'Input Curve (Unit Step)',
+                    data: Array(500).fill(1),
+                    borderColor: 'blue',
+                    borderWidth: 1,  // Thinner line
+                    pointRadius: 0,  // No bubbles
+                    fill: false,
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    x: { title: { display: true, text: 'Time [s]' } },
+                    y: { title: { display: true, text: 'Amplitude' }, min: 0, max: 1.1 }
+                }
+            }
+        });
+
+        responseChart = new Chart(ctxResponse, {
+            type: 'line',
+            data: {
+                labels: time,
+                datasets: [{
+                    label: 'Step Response',
+                    data: stepResponseData,
+                    borderColor: 'green',
+                    borderWidth: 1,  // Thinner line
+                    pointRadius: 0,  // No bubbles
+                    fill: false,
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    x: { title: { display: true, text: 'Time [s]' } },
+                    y: { 
+                        title: { display: true, text: 'Amplitude' },
+                        suggestedMin: Math.min(...stepResponseData) - 0.1,  // Auto-scale y-axis
+                        suggestedMax: Math.max(...stepResponseData) + 0.1   // Auto-scale y-axis
+                    }
+                }
+            }
+        });
+    }
+</script>
+
+</body>
+</html>
